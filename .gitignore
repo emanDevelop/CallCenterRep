@@ -1,0 +1,9 @@
+# Pipecat framework checkout (installed into the Python env, not part of this project)
+pipecat/
+
+# Secrets
+.env
+
+node_modules/
+__pycache__/
+*.pyc

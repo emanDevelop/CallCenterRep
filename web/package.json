@@ -1,0 +1,17 @@
+{
+  "name": "yasmeen-voice-ui",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@pipecat-ai/client-js": "1.13.1",
+    "@pipecat-ai/small-webrtc-transport": "1.10.7"
+  },
+  "devDependencies": {
+    "vite": "7.1.12"
+  }
+}
