@@ -44,6 +44,10 @@
   --shadow: 0 20px 60px -20px rgba(0, 0, 0, 0.6);
   --user-bubble: rgba(139, 92, 246, 0.22);
   --bot-bubble: rgba(255, 255, 255, 0.05);
+  --flower-1: #a78bfa;
+  --flower-2: #f0abfc;
+  --flower-3: #8b5cf6;
+  --flower-center: #fdf4ff;
   color-scheme: dark;
 }
 
@@ -72,6 +76,10 @@
   --shadow: 0 20px 50px -24px rgba(15, 35, 70, 0.35);
   --user-bubble: rgba(13, 148, 136, 0.14);
   --bot-bubble: rgba(15, 35, 70, 0.05);
+  --flower-1: #0d9488;
+  --flower-2: #5eead4;
+  --flower-3: #1e3a8a;
+  --flower-center: #ffffff;
   color-scheme: light;
 }
 
@@ -138,10 +146,54 @@ svg {
   inset: 0;
   z-index: -1;
   pointer-events: none;
+  overflow: hidden;
   background:
     radial-gradient(60vmax 40vmax at 15% -10%, var(--glow-1), transparent 60%),
     radial-gradient(50vmax 40vmax at 110% 20%, var(--glow-2), transparent 60%),
     linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
+}
+
+/* Floating flowers: small five-petal SVGs that sway down the page. */
+.flower {
+  position: absolute;
+  left: var(--x);
+  top: -60px;
+  width: var(--s);
+  height: var(--s);
+  color: var(--c);
+  opacity: 0.5;
+  animation: fall var(--d) linear infinite;
+  animation-delay: var(--delay);
+}
+
+.flower svg {
+  width: 100%;
+  height: 100%;
+  stroke: none;
+  fill: currentColor;
+  animation: sway calc(var(--d) / 5) ease-in-out infinite alternate;
+}
+
+.flower circle {
+  fill: var(--flower-center);
+}
+
+@keyframes fall {
+  from {
+    transform: translateY(0) rotate(0deg);
+  }
+  to {
+    transform: translateY(calc(100vh + 120px)) rotate(var(--r));
+  }
+}
+
+@keyframes sway {
+  from {
+    transform: translateX(-14px);
+  }
+  to {
+    transform: translateX(14px);
+  }
 }
 
 /* ---------- Header ---------- */
@@ -773,6 +825,17 @@ svg {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* Keep the flowers, but still: each one rests at its own spot. */
+  .flower,
+  .flower svg {
+    animation: none !important;
+  }
+
+  .flower {
+    top: var(--sy);
+    transform: rotate(var(--r));
+  }
+
   *,
   *::before,
   *::after {

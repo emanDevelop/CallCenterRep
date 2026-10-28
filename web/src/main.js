@@ -2,6 +2,7 @@ import { PipecatClient, RTVIEvent } from "@pipecat-ai/client-js";
 import { SmallWebRTCTransport } from "@pipecat-ai/small-webrtc-transport";
 import { STRINGS } from "./i18n.js";
 import { audioContext, LevelMeter } from "./meter.js";
+import { addFlowers } from "./flowers.js";
 import { Orb } from "./orb.js";
 
 const $ = (id) => document.getElementById(id);
@@ -561,5 +562,6 @@ window.addEventListener("pagehide", () => {
   }
 });
 
+addFlowers(document.querySelector(".backdrop"));
 applyLanguage();
 loadMics();
