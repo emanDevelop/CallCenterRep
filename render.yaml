@@ -1,0 +1,16 @@
+# Render Blueprint: one web service that runs the voice bot and serves its page.
+# Calls run over a WebSocket at /ws-client, which Render's HTTP proxy supports.
+services:
+  - type: web
+    name: yasmeen-voice-assistant
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server/bot.py --host 0.0.0.0 --port $PORT -t websocket
+    healthCheckPath: /status
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.11
+      # Asked for when the Blueprint is created; never stored in the repository.
+      - key: OPENAI_API_KEY
+        sync: false

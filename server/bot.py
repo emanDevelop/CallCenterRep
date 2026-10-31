@@ -4,9 +4,13 @@ The bot answers only from ../company-info.txt. Edit that file and restart the bo
 change what it knows.
 
 Routes:
-    /client/   the company voice UI (built from ../web into ./ui)
-    /classic/  the stock Pipecat playground
-    /          redirects to /client/
+    /client/    the company voice UI (built from ../web into ./ui)
+    /ws-client  the call itself: audio and RTVI messages over a WebSocket (?lang=ar|en)
+    /classic/   the stock Pipecat playground (needs the WebRTC transport, so local only)
+    /           redirects to /client/
+
+The UI talks to the bot over a WebSocket rather than WebRTC so it works on hosts that
+only accept HTTP traffic, such as Render.
 """
 
 import os
@@ -34,8 +38,10 @@ from pipecat.services.openai.realtime.events import (
     SemanticTurnDetection,
     SessionProperties,
 )
+from pipecat.serializers.protobuf import ProtobufFrameSerializer
 from pipecat.services.openai.realtime.llm import OpenAIRealtimeLLMService
 from pipecat.transports.base_transport import BaseTransport, TransportParams
+from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams
 from pipecat.workers.runner import WorkerRunner
 
 HERE = Path(__file__).parent
@@ -72,8 +78,22 @@ except ImportError as e:
     logger.warning(f"Classic playground not available: {e}")
 
 transport_params = {
+    "websocket": lambda: FastAPIWebsocketParams(
+        audio_in_enabled=True,
+        audio_out_enabled=True,
+        serializer=ProtobufFrameSerializer(),
+    ),
     "webrtc": lambda: TransportParams(audio_in_enabled=True, audio_out_enabled=True),
 }
+
+
+def caller_language(runner_args: RunnerArguments) -> str:
+    """The UI language the caller chose: ?lang= on the WebSocket, else the /start body."""
+    websocket = getattr(runner_args, "websocket", None)
+    lang = websocket.query_params.get("lang") if websocket is not None else None
+    if lang is None and isinstance(runner_args.body, dict):
+        lang = runner_args.body.get("lang")
+    return lang if lang in GREETINGS else "ar"
 
 
 # Typed messages from the UI (RTVI send-text) arrive as an LLMMessagesAppendFrame. The
@@ -126,8 +146,7 @@ class CompanyRealtimeLLMService(OpenAIRealtimeLLMService):
 
 
 async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
-    body = runner_args.body if isinstance(runner_args.body, dict) else {}
-    lang = body.get("lang") if body.get("lang") in GREETINGS else "ar"
+    lang = caller_language(runner_args)
 
     llm = CompanyRealtimeLLMService(
         api_key=os.environ["OPENAI_API_KEY"],

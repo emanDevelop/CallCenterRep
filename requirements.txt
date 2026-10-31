@@ -1,0 +1,2 @@
+# Pipecat pinned to the commit this bot was built and tested against (2026-10-27).
+pipecat-ai[openai,runner,websocket] @ git+https://github.com/pipecat-ai/pipecat.git@d49f3098080854cf180a240b2e067fcbbbe83009

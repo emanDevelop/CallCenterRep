@@ -1,5 +1,5 @@
 import { PipecatClient, RTVIEvent } from "@pipecat-ai/client-js";
-import { SmallWebRTCTransport } from "@pipecat-ai/small-webrtc-transport";
+import { ProtobufFrameSerializer, WebSocketTransport } from "@pipecat-ai/websocket-transport";
 import { STRINGS } from "./i18n.js";
 import { audioContext, LevelMeter } from "./meter.js";
 import { addFlowers } from "./flowers.js";
@@ -62,12 +62,18 @@ const orb = new Orb($("orb"));
 const botAudio = new Audio();
 botAudio.autoplay = true;
 
-// Levels are measured in the page so the orb doesn't depend on transport level events.
+// Levels are measured in the page where a track is available (the mic), and otherwise
+// taken from the transport's level events (the bot, whose audio the transport plays
+// itself). Event levels fade out so a missed "silent" event can't freeze the orb.
 const micMeter = new LevelMeter();
 const botMeter = new LevelMeter();
+const eventLevel = { mic: 0, bot: 0 };
 setInterval(() => {
-  orb.setMicLevel(state.muted || state.micBlocked ? 0 : micMeter.level());
-  orb.setBotLevel(botMeter.level());
+  const mic = Math.max(micMeter.level(), eventLevel.mic);
+  orb.setMicLevel(state.muted || state.micBlocked ? 0 : mic);
+  orb.setBotLevel(Math.max(botMeter.level(), eventLevel.bot));
+  eventLevel.mic *= 0.8;
+  eventLevel.bot *= 0.8;
 }, 50);
 
 // ---------- i18n ----------
@@ -350,7 +356,7 @@ document.addEventListener("keydown", (e) => {
 
 // ---------- Call ----------
 function createClient() {
-  const transport = new SmallWebRTCTransport({ waitForICEGathering: true });
+  const transport = new WebSocketTransport({ serializer: new ProtobufFrameSerializer() });
   const c = new PipecatClient({
     transport,
     enableMic: true,
@@ -403,6 +409,13 @@ function createClient() {
     }
   });
 
+  c.on(RTVIEvent.LocalAudioLevel, (level) => {
+    if (Number.isFinite(level)) eventLevel.mic = Math.max(eventLevel.mic, level);
+  });
+  c.on(RTVIEvent.RemoteAudioLevel, (level) => {
+    if (Number.isFinite(level)) eventLevel.bot = Math.max(eventLevel.bot, level);
+  });
+
   c.on(RTVIEvent.DeviceError, (err) => {
     const type = err?.type;
     if (type === "permissions" || type === "not-found" || type === "undefined-mediadevices") {
@@ -429,16 +442,22 @@ function createClient() {
   return { client: c, transport };
 }
 
-// StartBotError reports a failed fetch as status 500, the same as a real server error,
-// so ask the server directly: a request that can't connect means it isn't running.
-async function isServerDown(err) {
-  if ([502, 503, 504].includes(err?.status)) return true;
+// A failed WebSocket doesn't say why, so ask the server directly: a request that can't
+// connect, or a gateway error from the host's proxy, means the bot isn't running.
+async function isServerDown() {
   try {
-    await fetch("/status", { cache: "no-store" });
-    return false;
+    const res = await fetch("/status", { cache: "no-store" });
+    return [502, 503, 504].includes(res.status);
   } catch {
     return true;
   }
+}
+
+// The call runs over a WebSocket on the same host that served this page, so the
+// address is built from the page's own URL (wss:// behind HTTPS, e.g. on Render).
+function callUrl() {
+  const scheme = location.protocol === "https:" ? "wss" : "ws";
+  return `${scheme}://${location.host}/ws-client?lang=${encodeURIComponent(lang)}`;
 }
 
 async function startCall() {
@@ -453,36 +472,17 @@ async function startCall() {
   render();
   audioContext(); // created inside the click so the browser allows audio
 
-  const { client: c, transport } = createClient();
+  const { client: c } = createClient();
   client = c;
 
-  let started;
   try {
-    started = await c.startBot({
-      endpoint: "/start",
-      requestData: {
-        transport: "webrtc",
-        createDailyRoom: false,
-        enableDefaultIceServers: true,
-        body: { lang },
-      },
-    });
-  } catch (err) {
-    console.error("startBot failed", err);
-    finishCall();
-    showError((await isServerDown(err)) ? "errServerDown" : "errConnect");
-    return;
-  }
-
-  try {
-    const ice = started?.iceConfig?.iceServers;
-    if (Array.isArray(ice) && ice.length) transport.iceServers = ice;
-    await c.connect({ sessionId: started?.sessionId ?? started?.session_id });
+    await c.connect({ wsUrl: callUrl() });
   } catch (err) {
     console.error("connect failed", err);
     const denied = err?.name === "NotAllowedError" || err?.type === "permissions";
     await endCall();
-    showError(denied ? "errMicDenied" : "errConnect");
+    if (denied) showError("errMicDenied");
+    else showError((await isServerDown()) ? "errServerDown" : "errConnect");
   }
 }
 

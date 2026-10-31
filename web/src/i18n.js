@@ -33,7 +33,7 @@ export const STRINGS = {
     errMicDenied:
       "ما قدرنا نوصل للميكروفون. اسمح للمتصفح يستخدمه من أيقونة القفل جنب العنوان، أو اكتب سؤالك بالأسفل.",
     errNoMic: "ما لقينا ميكروفون موصول. وصّل واحد، أو اكتب سؤالك بالأسفل.",
-    errServerDown: "السيرفر مش شغّال. شغّل البوت (run-company-bot.cmd) وجرّب كمان مرة.",
+    errServerDown: "المساعد مش متاح هلأ. جرّب كمان شوي.",
     errConnect: "صار خطأ بالاتصال. جرّب كمان مرة بعد شوي.",
     errDropped: "انقطع الاتصال مع المساعد.",
   },
@@ -71,7 +71,7 @@ export const STRINGS = {
     errMicDenied:
       "We couldn't access your microphone. Allow it from the lock icon next to the address bar, or type your question below.",
     errNoMic: "No microphone was found. Plug one in, or type your question below.",
-    errServerDown: "The server isn't running. Start the bot (run-company-bot.cmd) and try again.",
+    errServerDown: "The assistant isn't available right now. Please try again in a minute.",
     errConnect: "Something went wrong while connecting. Please try again shortly.",
     errDropped: "The connection to the assistant was lost.",
   },

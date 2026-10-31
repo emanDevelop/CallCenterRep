@@ -12,6 +12,9 @@ A voice customer-support bot for a **fictional** company, built on
 | `server/bot.py`    | The bot and its routes.                                      |
 | `server/ui/`       | The built web UI, committed so the bot runs without Node.    |
 | `web/`             | Source of the web UI (Vite, plain JavaScript).               |
+| `brand/`           | Brand guide, logo and generated marketing images.            |
+| `requirements.txt` | Python dependencies (Pipecat pinned to a tested commit).     |
+| `render.yaml`      | Render Blueprint for deploying the bot.                      |
 | `pipecat/`         | Pipecat checkout, installed into the Python env (not tracked). |
 
 ## Run
@@ -20,8 +23,21 @@ A voice customer-support bot for a **fictional** company, built on
 2. Double-click `run-company-bot.cmd` (uses the env at `%USERPROFILE%\.venvs\pipecat`).
 3. Open http://localhost:7860/ in Chrome or Edge and press the call button.
 
-Routes: `/client/` is this UI, `/classic/` is the stock Pipecat playground, and `/` redirects
-to `/client/`.
+Routes: `/client/` is this UI, `/ws-client` carries the call (audio over a WebSocket),
+`/classic/` is the stock Pipecat playground (WebRTC, local only), and `/` redirects to
+`/client/`.
+
+## Deploy to Render
+
+`render.yaml` describes one Python web service on Render's free plan.
+
+1. On [render.com](https://render.com), choose **New → Blueprint** and connect this GitHub repo.
+2. When asked, paste your OpenAI key as `OPENAI_API_KEY`. It is stored only on Render.
+3. Wait for the build (a few minutes the first time), then open the service's
+   `https://….onrender.com` address.
+
+The free plan sleeps after about 15 minutes without visitors; the first visit afterwards
+takes 30–60 seconds. Each call also uses OpenAI Realtime credit.
 
 ## Change the UI
 
@@ -31,4 +47,4 @@ npm install
 npm run build   # writes server/ui
 ```
 
-`npm run dev` serves the UI with hot reload and forwards API calls to a bot on port 7860.
+`npm run dev` serves the UI with hot reload and forwards calls to a bot on port 7860.

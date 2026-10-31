@@ -10,9 +10,8 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/start": "http://localhost:7860",
-      "/sessions": "http://localhost:7860",
-      "/api": "http://localhost:7860",
+      "/ws-client": { target: "ws://localhost:7860", ws: true },
+      "/status": "http://localhost:7860",
     },
   },
 });
