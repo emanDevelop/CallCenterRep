@@ -17,11 +17,18 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
 from dotenv import load_dotenv
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
-from pipecat.frames.frames import DataFrame, Frame, LLMMessagesAppendFrame, LLMRunFrame
+from pipecat.frames.frames import (
+    DataFrame,
+    Frame,
+    LLMMessagesAppendFrame,
+    LLMRunFrame,
+    OutputAudioRawFrame,
+)
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker, ProcessorUnusablePolicy
 from pipecat.processors.aggregators.llm_context import LLMContext
@@ -62,6 +69,11 @@ Rules:
 Company information:
 {COMPANY_INFO}
 """
+
+# How much louder than OpenAI's own level the bot speaks. Phones play browser audio
+# quietly while the microphone is open, so the default leans loud. Override with the
+# BOT_VOLUME environment variable (1.0 = unchanged).
+BOT_VOLUME = float(os.getenv("BOT_VOLUME", "2.5"))
 
 GREETINGS = {
     "ar": "Greet the caller briefly in Jordanian Arabic as the company's agent.",
@@ -133,6 +145,31 @@ class TypedTextRouter(FrameProcessor):
         await self.push_frame(frame, direction)
 
 
+class OutputVolume(FrameProcessor):
+    """Raises the volume of the bot's voice, soft-limiting peaks so loud speech doesn't clip.
+
+    Quiet audio is scaled by ``gain`` almost linearly; as the result approaches full scale,
+    tanh rounds it off instead of hard clipping.
+    """
+
+    def __init__(self, gain: float, **kwargs):
+        super().__init__(**kwargs)
+        self._gain = gain
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)
+        if (
+            self._gain != 1.0
+            and direction == FrameDirection.DOWNSTREAM
+            and isinstance(frame, OutputAudioRawFrame)
+            and frame.audio
+        ):
+            samples = np.frombuffer(frame.audio, dtype=np.int16).astype(np.float32) / 32768.0
+            louder = np.tanh(samples * self._gain)
+            frame.audio = (louder * 32767.0).astype(np.int16).tobytes()
+        await self.push_frame(frame, direction)
+
+
 class CompanyRealtimeLLMService(OpenAIRealtimeLLMService):
     """OpenAI Realtime service that also answers TypedTextFrame."""
 
@@ -173,6 +210,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
             TypedTextRouter(),
             user_aggregator,
             llm,
+            OutputVolume(BOT_VOLUME),
             transport.output(),
             assistant_aggregator,
         ]
