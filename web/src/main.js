@@ -17,6 +17,7 @@ const el = {
   settingsBtn: $("settingsBtn"),
   settingsMenu: $("settingsMenu"),
   micSelect: $("micSelect"),
+  speakerMode: $("speakerMode"),
   status: $("status"),
   toast: $("toast"),
   transcript: $("transcript"),
@@ -54,7 +55,50 @@ const state = {
   micBlocked: false,
   botSpeaking: false,
   preferredMic: load("yd-mic") || "",
+  speakerMode: load("yd-speaker") === "1", // the switch in the settings menu
+  callSpeakerMode: false, // what the current call started with
 };
+
+// ---------- Speaker mode ----------
+// With echo cancellation on, Android treats the page as a phone call and plays it at
+// the quieter in-call volume. Speaker mode asks for the microphone without that voice
+// processing, so audio plays at media volume. With no echo cancelling the mic would hear
+// the bot through the loudspeaker, so in speaker mode it closes while the bot speaks and
+// reopens shortly after (MIC_REOPEN_MS lets the last words fade out of the room).
+const MIC_REOPEN_MS = 600;
+let micReopenTimer = null;
+
+function withoutVoiceProcessing(constraints) {
+  if (!constraints?.audio) return constraints;
+  const audio = typeof constraints.audio === "object" ? { ...constraints.audio } : {};
+  audio.echoCancellation = false;
+  audio.noiseSuppression = false;
+  audio.autoGainControl = false;
+  return { ...constraints, audio };
+}
+
+if (navigator.mediaDevices?.getUserMedia) {
+  const devices = navigator.mediaDevices;
+  const proto = Object.getPrototypeOf(devices);
+  devices.getUserMedia = (constraints) =>
+    proto.getUserMedia.call(
+      devices,
+      state.callSpeakerMode ? withoutVoiceProcessing(constraints) : constraints,
+    );
+}
+
+// Opens or closes the mic to match mute and, in speaker mode, whether the bot is talking.
+function applyMic() {
+  clearTimeout(micReopenTimer);
+  micReopenTimer = null;
+  if (!client || state.call !== "connected" || state.micBlocked) return;
+  const open = !state.muted && !(state.callSpeakerMode && state.botSpeaking);
+  try {
+    client.enableMic(open);
+  } catch {
+    /* the transport is going away */
+  }
+}
 
 let client = null;
 let ending = false;
@@ -427,11 +471,16 @@ function createClient() {
 
   c.on(RTVIEvent.BotStartedSpeaking, () => {
     state.botSpeaking = true;
+    applyMic();
     render();
   });
   c.on(RTVIEvent.BotStoppedSpeaking, () => {
     state.botSpeaking = false;
     orb.setBotLevel(0);
+    if (state.callSpeakerMode) {
+      clearTimeout(micReopenTimer);
+      micReopenTimer = setTimeout(applyMic, MIC_REOPEN_MS);
+    }
     render();
   });
 
@@ -469,6 +518,7 @@ async function startCall() {
   state.muted = false;
   state.micBlocked = false;
   state.botSpeaking = false;
+  state.callSpeakerMode = state.speakerMode;
   render();
   audioContext(); // created inside the click so the browser allows audio
 
@@ -487,6 +537,11 @@ async function startCall() {
 }
 
 function finishCall() {
+  clearTimeout(micReopenTimer);
+  micReopenTimer = null;
+  const speakerHint = el.speakerMode.closest(".switch-row").querySelector(".menu-hint");
+  speakerHint.dataset.i18n = "speakerHint";
+  speakerHint.textContent = t("speakerHint");
   state.call = "idle";
   state.botSpeaking = false;
   state.muted = false;
@@ -518,13 +573,23 @@ el.callBtn.addEventListener("click", () => {
 el.muteBtn.addEventListener("click", () => {
   if (!client || state.call !== "connected" || state.micBlocked) return;
   state.muted = !state.muted;
-  try {
-    client.enableMic(!state.muted);
-  } catch {
-    state.muted = !state.muted;
-  }
+  applyMic();
   if (state.muted) orb.setMicLevel(0);
   render();
+});
+
+// ---------- Speaker mode switch ----------
+el.speakerMode.checked = state.speakerMode;
+el.speakerMode.addEventListener("change", () => {
+  state.speakerMode = el.speakerMode.checked;
+  save("yd-speaker", state.speakerMode ? "1" : "0");
+  // The microphone's processing is fixed when it opens, so a change mid-call applies next call.
+  const hint = el.speakerMode.closest(".switch-row").querySelector(".menu-hint");
+  hint.dataset.i18n =
+    state.call !== "idle" && state.speakerMode !== state.callSpeakerMode
+      ? "speakerNextCall"
+      : "speakerHint";
+  hint.textContent = t(hint.dataset.i18n);
 });
 
 // ---------- Typed messages ----------
