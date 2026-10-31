@@ -70,10 +70,11 @@ Company information:
 {COMPANY_INFO}
 """
 
-# How much louder than OpenAI's own level the bot speaks. Phones play browser audio
-# quietly while the microphone is open, so the default leans loud. Override with the
+# How much louder than OpenAI's own level the bot speaks. Android plays browser audio at
+# the quieter in-call volume while the microphone is open, so the default leans loud;
+# OutputVolume's soft limiting keeps peaks below full scale. Override with the
 # BOT_VOLUME environment variable (1.0 = unchanged).
-BOT_VOLUME = float(os.getenv("BOT_VOLUME", "2.5"))
+BOT_VOLUME = float(os.getenv("BOT_VOLUME", "4.0"))
 
 GREETINGS = {
     "ar": "Greet the caller briefly in Jordanian Arabic as the company's agent.",
