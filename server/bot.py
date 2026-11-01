@@ -14,9 +14,12 @@ only accept HTTP traffic, such as Render.
 """
 
 import os
+import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
+import aiohttp
 import numpy as np
 from dotenv import load_dotenv
 from fastapi.staticfiles import StaticFiles
@@ -46,6 +49,7 @@ from pipecat.services.openai.realtime.events import (
     SessionProperties,
 )
 from pipecat.serializers.protobuf import ProtobufFrameSerializer
+from pipecat.services.llm_service import FunctionCallParams
 from pipecat.services.openai.realtime.llm import OpenAIRealtimeLLMService
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams
@@ -57,13 +61,29 @@ load_dotenv(ROOT / "pipecat" / ".env", override=True)
 
 COMPANY_INFO = (ROOT / "company-info.txt").read_text(encoding="utf-8")
 
+# Questions the bot can't answer are sent to an n8n workflow ("Unanswered Questions —
+# Voice Bot→Data Table") so the team can follow up. Without these, the bot skips reporting.
+N8N_UNANSWERED_URL = os.getenv("N8N_UNANSWERED_URL", "").strip()
+N8N_UNANSWERED_KEY = os.getenv("N8N_UNANSWERED_KEY", "").strip()
+REPORT_UNANSWERED = bool(N8N_UNANSWERED_URL and N8N_UNANSWERED_KEY)
+
+UNANSWERED_RULE = (
+    """- When the answer is not in the company information, call log_unanswered_question
+  with the caller's question right away, without saying anything first. Then tell the
+  caller you don't have that information yet and you've passed the question to the team,
+  who will follow up. Don't call it for greetings, thanks or small talk.
+"""
+    if REPORT_UNANSWERED
+    else ""
+)
+
 SYSTEM_INSTRUCTION = f"""You are a friendly customer-service agent for the company described below.
 You are in a live voice conversation, so keep answers short: one or two sentences.
 
 Rules:
 - Answer ONLY using the company information below. If the answer is not there, say you
   don't have that information and offer to connect the caller with the support team.
-- Never invent prices, dates, names or policies.
+{UNANSWERED_RULE}- Never invent prices, dates, names or policies.
 - Reply in the caller's language. In Arabic, speak in a natural Jordanian (Ammani) dialect.
 
 Company information:
@@ -98,6 +118,30 @@ transport_params = {
     ),
     "webrtc": lambda: TransportParams(audio_in_enabled=True, audio_out_enabled=True),
 }
+
+
+async def report_unanswered(question: str, missing_info: str, lang: str, session_id: str) -> bool:
+    """Sends an unanswered question to the n8n workflow. Returns whether it was saved."""
+    payload = {
+        "question": question,
+        "missing_info": missing_info,
+        "language": lang,
+        "session_id": session_id,
+        "source": "voice-bot",
+        "asked_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=8)) as session:
+            async with session.post(
+                N8N_UNANSWERED_URL, json=payload, headers={"x-yasmeen-key": N8N_UNANSWERED_KEY}
+            ) as response:
+                if response.status == 200:
+                    logger.info(f"Logged unanswered question: {question!r}")
+                    return True
+                logger.warning(f"n8n didn't save the question ({response.status}): {question!r}")
+    except Exception as e:
+        logger.warning(f"Couldn't reach n8n to log an unanswered question: {e}")
+    return False
 
 
 def caller_language(runner_args: RunnerArguments) -> str:
@@ -202,7 +246,25 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         ),
     )
 
-    context = LLMContext([{"role": "developer", "content": GREETINGS[lang]}])
+    session_id = str(uuid.uuid4())
+
+    async def log_unanswered_question(params: FunctionCallParams, question: str, missing_info: str):
+        """Record a caller's question that the company information can't answer.
+
+        The team reviews these questions and follows up with the caller.
+
+        Args:
+            question: The caller's question, in their own words and language.
+            missing_info: A short English description of the information that's missing.
+        """
+        logged = await report_unanswered(question, missing_info, lang, session_id)
+        await params.result_callback({"logged": logged})
+
+    messages = [{"role": "developer", "content": GREETINGS[lang]}]
+    if REPORT_UNANSWERED:
+        context = LLMContext(messages, [log_unanswered_question])
+    else:
+        context = LLMContext(messages)
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(context)
 
     pipeline = Pipeline(

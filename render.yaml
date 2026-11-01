@@ -14,3 +14,9 @@ services:
       # Asked for when the Blueprint is created; never stored in the repository.
       - key: OPENAI_API_KEY
         sync: false
+      # Optional: where to report questions the bot can't answer (the n8n workflow
+      # "Unanswered Questions — Voice Bot→Data Table") and its x-yasmeen-key secret.
+      - key: N8N_UNANSWERED_URL
+        sync: false
+      - key: N8N_UNANSWERED_KEY
+        sync: false

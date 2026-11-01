@@ -39,6 +39,23 @@ Routes: `/client/` is this UI, `/ws-client` carries the call (audio over a WebSo
 The free plan sleeps after about 15 minutes without visitors; the first visit afterwards
 takes 30–60 seconds. Each call also uses OpenAI Realtime credit.
 
+## Unanswered questions (n8n)
+
+When a caller asks something that isn't in `company-info.txt`, the bot calls its
+`log_unanswered_question` tool, which POSTs the question to the n8n workflow
+**Unanswered Questions — Voice Bot→Data Table**. n8n saves it to the data table
+**Yasmeen Cloud — Unanswered Questions** (question, missing_info, language, session_id,
+source, asked_at), and the bot tells the caller the team will follow up.
+
+Set both variables (in `pipecat/.env` locally, and in Render's Environment):
+
+| Variable             | Value                                                       |
+| -------------------- | ----------------------------------------------------------- |
+| `N8N_UNANSWERED_URL` | The workflow's production webhook URL                       |
+| `N8N_UNANSWERED_KEY` | The `x-yasmeen-key` secret the workflow checks for          |
+
+Without them the bot works as before and simply doesn't report questions.
+
 ## Change the UI
 
 ```bash
