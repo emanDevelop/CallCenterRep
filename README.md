@@ -43,9 +43,13 @@ takes 30–60 seconds. Each call also uses OpenAI Realtime credit.
 
 When a caller asks something that isn't in `company-info.txt`, the bot calls its
 `log_unanswered_question` tool, which POSTs the question to the n8n workflow
-**Unanswered Questions — Voice Bot→Data Table**. n8n saves it to the data table
-**Yasmeen Cloud — Unanswered Questions** (question, missing_info, language, session_id,
-source, asked_at), and the bot tells the caller the team will follow up.
+**Unanswered Questions — Voice Bot→Data Table**, and tells the caller the team will
+follow up. Each report carries a short English **topic** (e.g. `laptop sales`) chosen by
+the model, so the same need asked in different words or languages gets the same label.
+
+n8n keeps one row per topic in the data table **Yasmeen Cloud — Unanswered Questions**:
+the first time it saves the question with `times_asked = 1`; each repeat adds 1 to
+`times_asked` and updates `last_asked_at` instead of saving a new row.
 
 Set both variables (in `pipecat/.env` locally, and in Render's Environment):
 

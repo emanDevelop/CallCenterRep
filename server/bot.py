@@ -124,10 +124,17 @@ transport_params = {
 }
 
 
-async def report_unanswered(question: str, missing_info: str, lang: str, session_id: str) -> bool:
-    """Sends an unanswered question to the n8n workflow. Returns whether it was saved."""
+async def report_unanswered(
+    question: str, topic: str, missing_info: str, lang: str, session_id: str
+) -> bool:
+    """Sends an unanswered question to the n8n workflow. Returns whether it was saved.
+
+    The workflow keeps one row per topic and counts repeats, so the same need asked in
+    different words lands on the same row.
+    """
     payload = {
         "question": question,
+        "topic": topic,
         "missing_info": missing_info,
         "language": lang,
         "session_id": session_id,
@@ -143,7 +150,10 @@ async def report_unanswered(question: str, missing_info: str, lang: str, session
                 # so only the workflow's own {"ok": true} counts as saved.
                 result = await response.json(content_type=None)
                 if response.status == 200 and isinstance(result, dict) and result.get("ok"):
-                    logger.info(f"Logged unanswered question #{result.get('id')}: {question!r}")
+                    logger.info(
+                        f"Logged unanswered question #{result.get('id')} [{topic}] "
+                        f"(asked {result.get('times_asked', 1)}x): {question!r}"
+                    )
                     return True
                 logger.warning(
                     f"n8n didn't save the question ({response.status} {result}): {question!r}. "
@@ -258,16 +268,22 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
 
     session_id = str(uuid.uuid4())
 
-    async def log_unanswered_question(params: FunctionCallParams, question: str, missing_info: str):
+    async def log_unanswered_question(
+        params: FunctionCallParams, question: str, topic: str, missing_info: str
+    ):
         """Record a caller's question that the company information can't answer.
 
-        The team reviews these questions and follows up with the caller.
+        The team reviews these questions and follows up with the caller. Repeated
+        questions are counted by topic, so use the same topic for the same need.
 
         Args:
             question: The caller's question, in their own words and language.
+            topic: A short English label for what the caller wants, 1-4 lowercase words
+                naming the product or service, e.g. "laptop sales", "mobile repair",
+                "job openings", "product photography". Same need, same label.
             missing_info: A short English description of the information that's missing.
         """
-        logged = await report_unanswered(question, missing_info, lang, session_id)
+        logged = await report_unanswered(question, topic, missing_info, lang, session_id)
         await params.result_callback({"logged": logged})
 
     messages = [{"role": "developer", "content": GREETINGS[lang]}]
