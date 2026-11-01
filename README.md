@@ -48,8 +48,8 @@ follow up. Each report carries a short English **topic** (e.g. `laptop sales`) c
 the model, so the same need asked in different words or languages gets the same label.
 
 n8n keeps one row per topic in the data table **Yasmeen Cloud — Unanswered Questions**:
-the first time it saves the question with `times_asked = 1`; each repeat adds 1 to
-`times_asked` and updates `last_asked_at` instead of saving a new row.
+the first time it saves the question with `repeated = 1`; each repeat adds 1 to
+`repeated` and updates `last_asked_at` instead of saving a new row.
 
 Set both variables (in `pipecat/.env` locally, and in Render's Environment):
 

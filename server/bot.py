@@ -152,7 +152,7 @@ async def report_unanswered(
                 if response.status == 200 and isinstance(result, dict) and result.get("ok"):
                     logger.info(
                         f"Logged unanswered question #{result.get('id')} [{topic}] "
-                        f"(asked {result.get('times_asked', 1)}x): {question!r}"
+                        f"(repeated {result.get('repeated', 1)}x): {question!r}"
                     )
                     return True
                 logger.warning(
