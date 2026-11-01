@@ -66,6 +66,10 @@ COMPANY_INFO = (ROOT / "company-info.txt").read_text(encoding="utf-8")
 N8N_UNANSWERED_URL = os.getenv("N8N_UNANSWERED_URL", "").strip()
 N8N_UNANSWERED_KEY = os.getenv("N8N_UNANSWERED_KEY", "").strip()
 REPORT_UNANSWERED = bool(N8N_UNANSWERED_URL and N8N_UNANSWERED_KEY)
+logger.info(
+    "Unanswered-question reporting is "
+    + ("ON" if REPORT_UNANSWERED else "OFF (set N8N_UNANSWERED_URL and N8N_UNANSWERED_KEY)")
+)
 
 UNANSWERED_RULE = (
     """- When the answer is not in the company information, call log_unanswered_question
@@ -135,10 +139,16 @@ async def report_unanswered(question: str, missing_info: str, lang: str, session
             async with session.post(
                 N8N_UNANSWERED_URL, json=payload, headers={"x-yasmeen-key": N8N_UNANSWERED_KEY}
             ) as response:
-                if response.status == 200:
-                    logger.info(f"Logged unanswered question: {question!r}")
+                # n8n answers a request it ignored (wrong or missing key) with a plain 200,
+                # so only the workflow's own {"ok": true} counts as saved.
+                result = await response.json(content_type=None)
+                if response.status == 200 and isinstance(result, dict) and result.get("ok"):
+                    logger.info(f"Logged unanswered question #{result.get('id')}: {question!r}")
                     return True
-                logger.warning(f"n8n didn't save the question ({response.status}): {question!r}")
+                logger.warning(
+                    f"n8n didn't save the question ({response.status} {result}): {question!r}. "
+                    "If the reply is 'Webhook call received', N8N_UNANSWERED_KEY doesn't match."
+                )
     except Exception as e:
         logger.warning(f"Couldn't reach n8n to log an unanswered question: {e}")
     return False
